@@ -1,56 +1,53 @@
 <template>
-  <div class="space-y-6">
-    <div class="bg-white p-6 rounded-lg shadow">
-      <h3 class="text-lg font-medium text-gray-900 mb-4">Escáner QR</h3>
+  <div class="space-y-8">
+    <div class="card-elevated p-8">
+      <h3 class="text-2xl font-bold text-gray-900 mb-6 font-heading">Escáner QR</h3>
 
-      <div v-if="!qrScanning && !equipoVinculado" class="text-center space-y-4">
-        <div class="h-32 w-32 bg-gray-200 rounded-lg mx-auto flex items-center justify-center">
+      <div v-if="!qrScanning && !equipoVinculado" class="text-center space-y-6">
+        <div class="icon-large bg-gray-100 mx-auto">
           <i class="fas fa-qrcode text-6xl text-gray-400"></i>
         </div>
-        <p class="text-gray-600">Escanea el código QR del equipo para vincularte</p>
-        <button @click="startQRScanning"
-                class="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700">
+        <p class="text-gray-600 text-lg font-body">Escanea el código QR del equipo para vincularte</p>
+        <button @click="startQRScanning" class="btn-primary">
           <i class="fas fa-camera mr-2"></i>Iniciar Escáner
         </button>
       </div>
 
-      <div v-else-if="qrScanning" class="text-center space-y-4">
-        <div class="bg-gray-100 p-8 rounded-lg">
-          <i class="fas fa-spinner fa-spin text-4xl text-indigo-600 mb-4"></i>
-          <p class="text-gray-600">Escaneando código QR...</p>
-          <p class="text-sm text-gray-500">Apunta la cámara hacia el código QR del equipo</p>
+      <div v-else-if="qrScanning" class="text-center space-y-6">
+        <div class="bg-gradient-to-br from-indigo-50 to-indigo-100 p-12 rounded-xl border border-indigo-200">
+          <i class="fas fa-spinner fa-spin text-5xl text-indigo-600 mb-6"></i>
+          <p class="text-gray-700 text-xl font-body mb-2">Escaneando código QR...</p>
+          <p class="text-gray-500 font-body">Apunta la cámara hacia el código QR del equipo</p>
         </div>
-        <button @click="stopQRScanning"
-                class="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700">
+        <button @click="stopQRScanning" class="btn-danger">
           <i class="fas fa-stop mr-2"></i>Detener Escáner
         </button>
       </div>
 
       <!-- Sesión Activa -->
-      <div v-if="equipoVinculado" class="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-        <div class="flex items-center justify-center mb-4">
-          <div class="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center">
-            <i class="fas fa-check text-green-600 text-xl"></i>
+      <div v-if="equipoVinculado" class="mt-8 p-8 bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-xl">
+        <div class="flex items-center justify-center mb-6">
+          <div class="icon-container bg-green-100">
+            <i class="fas fa-check text-green-600 text-2xl"></i>
           </div>
         </div>
-        <h4 class="text-lg font-medium text-green-900 text-center mb-4">¡Vinculación Exitosa!</h4>
-        <div class="bg-white p-4 rounded-lg space-y-2">
-          <div class="flex justify-between">
-            <span class="font-medium">Equipo:</span>
-            <span>{{ equipoVinculado.equipo_info?.tipo }} - {{ equipoVinculado.equipo_info?.modelo }}</span>
+        <h4 class="text-2xl font-bold text-green-900 text-center mb-6 font-heading">¡Vinculación Exitosa!</h4>
+        <div class="bg-white p-6 rounded-xl shadow-sm space-y-4">
+          <div class="flex justify-between items-center py-2">
+            <span class="font-semibold text-gray-700 font-body">Equipo:</span>
+            <span class="text-gray-900 font-body">{{ equipoVinculado.equipo_info?.tipo }} - {{ equipoVinculado.equipo_info?.modelo }}</span>
           </div>
-          <div class="flex justify-between">
-            <span class="font-medium">Usuario:</span>
-            <span>{{ currentUser?.nombre }}</span>
+          <div class="flex justify-between items-center py-2">
+            <span class="font-semibold text-gray-700 font-body">Usuario:</span>
+            <span class="text-gray-900 font-body">{{ currentUser?.nombre }}</span>
           </div>
-          <div class="flex justify-between">
-            <span class="font-medium">Hora de vinculación:</span>
-            <span>{{ formatDate(equipoVinculado.fecha_inicio) }}</span>
+          <div class="flex justify-between items-center py-2">
+            <span class="font-semibold text-gray-700 font-body">Hora de vinculación:</span>
+            <span class="text-gray-900 font-body">{{ formatDate(equipoVinculado.fecha_inicio) }}</span>
           </div>
         </div>
-        <div class="text-center mt-4">
-          <button @click="cerrarSesionEquipo"
-                  class="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700">
+        <div class="text-center mt-6">
+          <button @click="cerrarSesionEquipo" class="btn-danger">
             <i class="fas fa-sign-out-alt mr-2"></i>Cerrar Sesión
           </button>
         </div>

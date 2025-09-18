@@ -68,7 +68,7 @@ app.use(express.urlencoded({ extended: true }));
 // Session configuration
 app.use(session({
   key: 'inman_session',
-  secret: process.env.SESSION_SECRET,
+  secret: process.env.SESSION_SECRET || 'default-secret-key-change-in-production',
   store: sessionStore,
   resave: false,
   saveUninitialized: false,
@@ -98,10 +98,10 @@ const requireAuth = (req, res, next) => {
   next();
 };
 
-// Get user permissions based on profile
-const getUserPermissions = (perfil) => {
+// Get user permissions based on profile - ACTUALIZADO PARA NUEVOS ROLES
+const getUserPermissions = (rol) => {
   const permissionsMap = {
-    'Administrador': {
+    'admin': {
       can_manage_users: true,
       can_manage_equipos: true,
       can_manage_reportes: true,
@@ -111,7 +111,7 @@ const getUserPermissions = (perfil) => {
       can_use_qr: true,
       modules: ['dashboard', 'equipos', 'reportes', 'monitoreo', 'mantenimientos', 'usuarios']
     },
-    'Técnico': {
+    'tecnico': {
       can_manage_users: false,
       can_manage_equipos: true,
       can_manage_reportes: true,
@@ -121,7 +121,7 @@ const getUserPermissions = (perfil) => {
       can_use_qr: true,
       modules: ['dashboard', 'equipos', 'reportes', 'monitoreo', 'mantenimientos']
     },
-    'Instructor': {
+    'usuario': {
       can_manage_users: false,
       can_manage_equipos: false,
       can_manage_reportes: false,
@@ -131,44 +131,77 @@ const getUserPermissions = (perfil) => {
       can_use_qr: false,
       can_create_reportes: true,
       modules: ['dashboard', 'equipos', 'reportes', 'monitoreo']
-    },
-    'Aprendiz': {
-      can_manage_users: false,
-      can_manage_equipos: false,
-      can_manage_reportes: false,
-      can_manage_mantenimientos: false,
-      can_view_dashboard: false,
-      can_view_monitoreo: false,
-      can_use_qr: true,
-      modules: ['qr']
     }
   };
-  return permissionsMap[perfil] || {};
+  return permissionsMap[rol] || {};
 };
-// CREAR EQUIPO - Agregar después de app.get('/api/equipos')
+
+// CREAR EQUIPO - CORREGIDO PARA NUEVA ESTRUCTURA
 app.post('/api/equipos', requireAuth, async (req, res) => {
   try {
+    console.log('Datos recibidos:', req.body); // Para debugging
+    
     const permissions = getUserPermissions(req.session.userProfile);
     if (!permissions.can_manage_equipos) {
       return res.status(403).json({ error: 'Sin permisos para crear equipos' });
     }
     
-    const { tipoEquipo_id, marca_id, modelo, procesador, RAM, disco, descripcion, estado = 'Disponible' } = req.body;
+    const { 
+      tipoEquipo_id, 
+      marca_id, 
+      modelo, 
+      procesador, 
+      RAM, 
+      disco, 
+      descripcion, 
+      estado_id = 1,
+      dimana,
+      idarea,
+      clasificacion
+    } = req.body;
+    
+    // Convertir undefined a null para evitar el error
+    const cleanValues = [
+      tipoEquipo_id || null,
+      marca_id || null, 
+      modelo || null,
+      procesador || null,
+      RAM || null,
+      disco || null,
+      descripcion || null,
+      estado_id || 1,
+      dimana || null,
+      idarea || null,
+      clasificacion || null
+    ];
+    
+    console.log('Valores limpiados:', cleanValues); // Para debugging
     
     const [result] = await pool.execute(
-      'INSERT INTO equipo (tipoEquipo_id, marca_id, modelo, procesador, RAM, disco, descripcion, estado, fecha_registro) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())',
-      [tipoEquipo_id, marca_id, modelo, procesador, RAM, disco, descripcion, estado]
+      'INSERT INTO equipo (tipoEquipo_id, marca_id, modelo, procesador, RAM, disco, descripcion, estado_id, dimana, idarea, clasificacion, fecha_registro) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
+      cleanValues
     );
     
     const equipoId = result.insertId;
     
     // Generate QR code
-    const codigoQR = `QR${equipoId.toString().padStart(3, '0')}${modelo.substring(0, 3).toUpperCase()}${equipoId.toString().padStart(3, '0')}`;
+    const codigoQR = `QR${equipoId.toString().padStart(3, '0')}${modelo ? modelo.substring(0, 3).toUpperCase() : 'EQP'}${equipoId.toString().padStart(3, '0')}`;
     
     await pool.execute(
       'UPDATE equipo SET codigo_qr = ? WHERE id = ?',
       [codigoQR, equipoId]
     );
+    
+    // Registrar actividad (solo si la tabla existe)
+    try {
+      await pool.execute(
+        'INSERT INTO actividad (equipo_id, usuario_id, tipo_actividad, descripcion, estado_nuevo_id) VALUES (?, ?, ?, ?, ?)',
+        [equipoId, req.session.userId, 'creacion', 'Registro inicial del equipo', estado_id || 1]
+      );
+    } catch (activityError) {
+      console.warn('No se pudo registrar actividad:', activityError.message);
+      // Continuar sin error si la tabla actividad no existe
+    }
     
     res.status(201).json({ 
       id: equipoId, 
@@ -177,11 +210,11 @@ app.post('/api/equipos', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Create equipo error:', error);
-    res.status(500).json({ error: 'Error al crear equipo' });
+    res.status(500).json({ error: 'Error al crear equipo', details: error.message });
   }
 });
 
-// ELIMINAR EQUIPO - Agregar también esta ruta
+// ELIMINAR EQUIPO - CORREGIDO
 app.delete('/api/equipos/:id', requireAuth, async (req, res) => {
   try {
     const permissions = getUserPermissions(req.session.userProfile);
@@ -191,11 +224,18 @@ app.delete('/api/equipos/:id', requireAuth, async (req, res) => {
     
     const { id } = req.params;
     
-    const [result] = await pool.execute('DELETE FROM equipo WHERE id = ?', [id]);
+    // Cambiar estado a inactivo en lugar de eliminar
+    const [result] = await pool.execute('UPDATE equipo SET activo = FALSE WHERE id = ?', [id]);
     
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'Equipo no encontrado' });
     }
+    
+    // Registrar actividad
+    await pool.execute(
+      'INSERT INTO actividad (equipo_id, usuario_id, tipo_actividad, descripcion) VALUES (?, ?, ?, ?)',
+      [id, req.session.userId, 'baja', 'Equipo dado de baja']
+    );
     
     res.json({ message: 'Equipo eliminado exitosamente' });
   } catch (error) {
@@ -204,14 +244,15 @@ app.delete('/api/equipos/:id', requireAuth, async (req, res) => {
   }
 });
 
-// AUTH ROUTES
+// AUTH ROUTES - CORREGIDOS PARA NUEVA ESTRUCTURA
 app.post('/api/auth/login', async (req, res) => {
   console.log('Login attempt:', req.body);
   try {
     const { email, password } = req.body;
     
+    // CORREGIDO: Usar tabla 'usuarios' y columna 'activo'
     const [users] = await pool.execute(
-      'SELECT u.*, p.nombre as perfil_nombre FROM usuario u JOIN perfil p ON u.perfil_id = p.id WHERE u.email = ? AND u.activo = 1',
+      'SELECT * FROM usuarios WHERE email = ? AND activo = TRUE',
       [email]
     );
     
@@ -221,17 +262,23 @@ app.post('/api/auth/login', async (req, res) => {
     
     const user = users[0];
     
-    // For demo purposes, using plain text password
+    // For demo purposes, using plain text password comparison
     const isValidPassword = password === 'password123';
     
     if (!isValidPassword) {
       return res.status(401).json({ success: false, error: 'Credenciales incorrectas' });
     }
     
-    req.session.userId = user.id;
-    req.session.userProfile = user.perfil_nombre;
+    // Actualizar última sesión
+    await pool.execute(
+      'UPDATE usuarios SET fecha_ultima_sesion = CURRENT_TIMESTAMP WHERE id = ?',
+      [user.id]
+    );
     
-    const permissions = getUserPermissions(user.perfil_nombre);
+    req.session.userId = user.id;
+    req.session.userProfile = user.rol; // CORREGIDO: usar 'rol' en lugar de 'perfil_nombre'
+    
+    const permissions = getUserPermissions(user.rol);
     
     res.json({
       success: true,
@@ -239,7 +286,7 @@ app.post('/api/auth/login', async (req, res) => {
         id: user.id,
         nombre: user.nombre,
         email: user.email,
-        perfil: user.perfil_nombre
+        perfil: user.rol // CORREGIDO: usar 'rol'
       },
       permissions
     });
@@ -258,14 +305,16 @@ app.post('/api/auth/logout', (req, res) => {
   });
 });
 
+// CORREGIDO: current-user endpoint
 app.get('/api/auth/current-user', async (req, res) => {
   try {
     if (!req.session.userId) {
       return res.json({ authenticated: false });
     }
     
+    // CORREGIDO: Usar tabla 'usuarios' sin JOIN
     const [users] = await pool.execute(
-      'SELECT u.*, p.nombre as perfil_nombre FROM usuario u JOIN perfil p ON u.perfil_id = p.id WHERE u.id = ?',
+      'SELECT * FROM usuarios WHERE id = ?',
       [req.session.userId]
     );
     
@@ -274,7 +323,7 @@ app.get('/api/auth/current-user', async (req, res) => {
     }
     
     const user = users[0];
-    const permissions = getUserPermissions(user.perfil_nombre);
+    const permissions = getUserPermissions(user.rol); // CORREGIDO: usar 'rol'
     
     res.json({
       authenticated: true,
@@ -282,7 +331,7 @@ app.get('/api/auth/current-user', async (req, res) => {
         id: user.id,
         nombre: user.nombre,
         email: user.email,
-        perfil: user.perfil_nombre
+        perfil: user.rol // CORREGIDO: usar 'rol'
       },
       permissions
     });
@@ -292,7 +341,7 @@ app.get('/api/auth/current-user', async (req, res) => {
   }
 });
 
-// DASHBOARD ROUTES
+// DASHBOARD ROUTES - CORREGIDO PARA NUEVA ESTRUCTURA
 app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
   try {
     const permissions = getUserPermissions(req.session.userProfile);
@@ -300,38 +349,37 @@ app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
       return res.status(403).json({ error: 'Sin permisos para ver dashboard' });
     }
     
-    // Equipment stats
+    // Equipment stats - CORREGIDO: usar estado_id con JOIN
     const [equiposStats] = await pool.execute(`
       SELECT 
         COUNT(*) as total,
-        SUM(CASE WHEN estado = 'Disponible' THEN 1 ELSE 0 END) as disponibles,
-        SUM(CASE WHEN estado = 'En mantenimiento' THEN 1 ELSE 0 END) as mantenimiento,
-        SUM(CASE WHEN estado = 'Dañado' THEN 1 ELSE 0 END) as danados
-      FROM equipo
+        SUM(CASE WHEN est.nombre = 'Disponible' THEN 1 ELSE 0 END) as disponibles,
+        SUM(CASE WHEN est.nombre = 'Mantenimiento' THEN 1 ELSE 0 END) as mantenimiento,
+        SUM(CASE WHEN est.nombre = 'Dañado' THEN 1 ELSE 0 END) as danados
+      FROM equipo e
+      JOIN estado est ON e.estado_id = est.id
+      WHERE e.activo = TRUE
     `);
     
-    // Active reports
-    const [reportesStats] = await pool.execute('SELECT COUNT(*) as count FROM reporte WHERE resuelto = 0');
-    
-    // Recent reports
-    const [recentReports] = await pool.execute(`
-      SELECT r.id, r.observacion, r.fechahora, u.nombre as usuario,
+    // Recent activities (reemplazar reportes por actividades)
+    const [recentActivities] = await pool.execute(`
+      SELECT a.id, a.descripcion, a.fecha_actividad, u.nombre as usuario,
              CONCAT(te.nombre, ' - ', m.nombre, ' ', e.modelo) as equipo
-      FROM reporte r
-      JOIN usuario u ON r.usuario_id = u.id
-      JOIN equipo e ON r.equipo_id = e.id
+      FROM actividad a
+      JOIN usuarios u ON a.usuario_id = u.id
+      JOIN equipo e ON a.equipo_id = e.id
       JOIN tipoEquipo te ON e.tipoEquipo_id = te.id
       JOIN marca m ON e.marca_id = m.id
-      ORDER BY r.fechahora DESC LIMIT 5
+      ORDER BY a.fecha_actividad DESC LIMIT 5
     `);
     
-    const reportesRecientes = recentReports.map(report => ({
-      id: report.id,
-      usuario: report.usuario,
-      equipo: report.equipo,
-      observacion: report.observacion.length > 100 ? 
-        report.observacion.substring(0, 100) + '...' : report.observacion,
-      fecha: new Date(report.fechahora).toLocaleDateString('es-ES', {
+    const actividadesRecientes = recentActivities.map(activity => ({
+      id: activity.id,
+      usuario: activity.usuario,
+      equipo: activity.equipo,
+      descripcion: activity.descripcion && activity.descripcion.length > 100 ? 
+        activity.descripcion.substring(0, 100) + '...' : activity.descripcion,
+      fecha: new Date(activity.fecha_actividad).toLocaleDateString('es-ES', {
         day: '2-digit', month: '2-digit', year: 'numeric',
         hour: '2-digit', minute: '2-digit'
       })
@@ -339,8 +387,7 @@ app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
     
     res.json({
       equipos_stats: equiposStats[0],
-      reportes_activos: reportesStats[0].count,
-      reportes_recientes: reportesRecientes
+      actividades_recientes: actividadesRecientes
     });
   } catch (error) {
     console.error('Dashboard stats error:', error);
@@ -348,14 +395,16 @@ app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
   }
 });
 
-// EQUIPOS ROUTES
+// EQUIPOS ROUTES - CORREGIDO
 app.get('/api/equipos', requireAuth, async (req, res) => {
   try {
     const [equipos] = await pool.execute(`
-      SELECT e.*, te.nombre as tipo_equipo, m.nombre as marca_nombre
+      SELECT e.*, te.nombre as tipo_equipo, m.nombre as marca_nombre, est.nombre as estado_nombre, est.color as estado_color
       FROM equipo e
       JOIN tipoEquipo te ON e.tipoEquipo_id = te.id
       JOIN marca m ON e.marca_id = m.id
+      JOIN estado est ON e.estado_id = est.id
+      WHERE e.activo = TRUE
       ORDER BY e.id DESC
     `);
     
@@ -366,29 +415,14 @@ app.get('/api/equipos', requireAuth, async (req, res) => {
   }
 });
 
-// BASIC DATA ROUTES
-app.get('/api/areas', requireAuth, async (req, res) => {
+// BASIC DATA ROUTES - MANTENER LOS EXISTENTES PERO AGREGAR ESTADOS
+app.get('/api/estados', requireAuth, async (req, res) => {
   try {
-    const [areas] = await pool.execute('SELECT * FROM area ORDER BY nombre');
-    res.json(areas);
+    const [estados] = await pool.execute('SELECT * FROM estado ORDER BY nombre');
+    res.json(estados);
   } catch (error) {
-    console.error('Get areas error:', error);
-    res.status(500).json({ error: 'Error al cargar áreas' });
-  }
-});
-
-app.get('/api/espacios', requireAuth, async (req, res) => {
-  try {
-    const [espacios] = await pool.execute(`
-      SELECT e.*, a.nombre as area_nombre 
-      FROM espacio e 
-      JOIN area a ON e.area_id = a.id 
-      ORDER BY a.nombre, e.nombre
-    `);
-    res.json(espacios);
-  } catch (error) {
-    console.error('Get espacios error:', error);
-    res.status(500).json({ error: 'Error al cargar espacios' });
+    console.error('Get estados error:', error);
+    res.status(500).json({ error: 'Error al cargar estados' });
   }
 });
 
@@ -412,48 +446,27 @@ app.get('/api/tipos-equipo', requireAuth, async (req, res) => {
   }
 });
 
-// REPORTES ROUTES
-app.get('/api/reportes', requireAuth, async (req, res) => {
+// ACTIVIDADES ROUTES - NUEVO ENDPOINT
+app.get('/api/actividades', requireAuth, async (req, res) => {
   try {
-    const [reportes] = await pool.execute(`
-      SELECT r.*, u.nombre as usuario_nombre, 
+    const [actividades] = await pool.execute(`
+      SELECT a.*, u.nombre as usuario_nombre, 
              te.nombre as equipo_tipo, m.nombre as equipo_marca, e.modelo as equipo_modelo,
-             a.nombre as area_nombre, esp.nombre as espacio_nombre
-      FROM reporte r
-      JOIN usuario u ON r.usuario_id = u.id
-      JOIN equipo e ON r.equipo_id = e.id
+             ea.nombre as estado_anterior, en.nombre as estado_nuevo
+      FROM actividad a
+      JOIN usuarios u ON a.usuario_id = u.id
+      JOIN equipo e ON a.equipo_id = e.id
       JOIN tipoEquipo te ON e.tipoEquipo_id = te.id
       JOIN marca m ON e.marca_id = m.id
-      JOIN area a ON r.area_id = a.id
-      JOIN espacio esp ON r.espacio_id = esp.id
-      ORDER BY r.fechahora DESC
+      LEFT JOIN estado ea ON a.estado_anterior_id = ea.id
+      LEFT JOIN estado en ON a.estado_nuevo_id = en.id
+      ORDER BY a.fecha_actividad DESC
     `);
     
-    res.json(reportes);
+    res.json(actividades);
   } catch (error) {
-    console.error('Get reportes error:', error);
-    res.status(500).json({ error: 'Error al cargar reportes' });
-  }
-});
-
-app.post('/api/reportes', requireAuth, async (req, res) => {
-  try {
-    const permissions = getUserPermissions(req.session.userProfile);
-    if (!permissions.can_create_reportes && !permissions.can_manage_reportes) {
-      return res.status(403).json({ error: 'Sin permisos para crear reportes' });
-    }
-    
-    const { equipo, area, espacio, observacion } = req.body;
-    
-    const [result] = await pool.execute(
-      'INSERT INTO reporte (usuario_id, equipo_id, area_id, espacio_id, observacion, fechahora) VALUES (?, ?, ?, ?, ?, NOW())',
-      [req.session.userId, equipo, area, espacio, observacion]
-    );
-    
-    res.status(201).json({ id: result.insertId, message: 'Reporte creado exitosamente' });
-  } catch (error) {
-    console.error('Create reporte error:', error);
-    res.status(500).json({ error: 'Error al crear reporte' });
+    console.error('Get actividades error:', error);
+    res.status(500).json({ error: 'Error al cargar actividades' });
   }
 });
 

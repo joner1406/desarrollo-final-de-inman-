@@ -1,74 +1,93 @@
 <template>
-  <div class="space-y-6">
+  <div class="space-y-8">
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-      <div class="bg-white p-6 rounded-lg shadow">
+      <div class="card-elevated p-6">
         <div class="flex items-center justify-between">
-          <div>
-            <p class="text-sm text-gray-600">Total Equipos</p>
-            <p class="text-3xl font-bold text-gray-900">{{ stats?.equipos_stats?.total || 0 }}</p>
+          <div class="space-y-2">
+            <p class="text-sm font-medium text-gray-600 font-body uppercase tracking-wide">Total Equipos</p>
+            <p class="text-4xl font-bold text-gray-900 font-heading">{{ stats?.equipos_stats?.total || 0 }}</p>
           </div>
-          <div class="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
-            <i class="fas fa-desktop text-blue-600"></i>
+          <div class="icon-container bg-blue-100">
+            <i class="fas fa-desktop text-blue-600 text-xl"></i>
           </div>
         </div>
       </div>
 
-      <div class="bg-white p-6 rounded-lg shadow">
+      <div class="card-elevated p-6">
         <div class="flex items-center justify-between">
-          <div>
-            <p class="text-sm text-gray-600">Disponibles</p>
-            <p class="text-3xl font-bold text-green-600">{{ stats?.equipos_stats?.disponibles || 0 }}</p>
+          <div class="space-y-2">
+            <p class="text-sm font-medium text-gray-600 font-body uppercase tracking-wide">Disponibles</p>
+            <p class="text-4xl font-bold text-green-600 font-heading">{{ stats?.equipos_stats?.disponibles || 0 }}</p>
           </div>
-          <div class="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center">
-            <i class="fas fa-check-circle text-green-600"></i>
+          <div class="icon-container bg-green-100">
+            <i class="fas fa-check-circle text-green-600 text-xl"></i>
           </div>
         </div>
       </div>
 
-      <div class="bg-white p-6 rounded-lg shadow">
+      <div class="card-elevated p-6">
         <div class="flex items-center justify-between">
-          <div>
-            <p class="text-sm text-gray-600">En Mantenimiento</p>
-            <p class="text-3xl font-bold text-yellow-600">{{ stats?.equipos_stats?.mantenimiento || 0 }}</p>
+          <div class="space-y-2">
+            <p class="text-sm font-medium text-gray-600 font-body uppercase tracking-wide">En Mantenimiento</p>
+            <p class="text-4xl font-bold text-yellow-600 font-heading">{{ stats?.equipos_stats?.mantenimiento || 0 }}</p>
           </div>
-          <div class="h-12 w-12 bg-yellow-100 rounded-full flex items-center justify-center">
-            <i class="fas fa-tools text-yellow-600"></i>
+          <div class="icon-container bg-yellow-100">
+            <i class="fas fa-tools text-yellow-600 text-xl"></i>
           </div>
         </div>
       </div>
 
-      <div class="bg-white p-6 rounded-lg shadow">
+      <div class="card-elevated p-6">
         <div class="flex items-center justify-between">
-          <div>
-            <p class="text-sm text-gray-600">Reportes Activos</p>
-            <p class="text-3xl font-bold text-red-600">{{ stats?.reportes_activos || 0 }}</p>
+          <div class="space-y-2">
+            <p class="text-sm font-medium text-gray-600 font-body uppercase tracking-wide">Reportes Activos</p>
+            <p class="text-4xl font-bold text-red-600 font-heading">{{ stats?.reportes_activos || 0 }}</p>
           </div>
-          <div class="h-12 w-12 bg-red-100 rounded-full flex items-center justify-center">
-            <i class="fas fa-exclamation-triangle text-red-600"></i>
+          <div class="icon-container bg-red-100">
+            <i class="fas fa-exclamation-triangle text-red-600 text-xl"></i>
           </div>
         </div>
       </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div class="bg-white p-6 rounded-lg shadow">
-        <h3 class="text-lg font-medium text-gray-900 mb-4">Estado de Equipos</h3>
-        <canvas id="equiposChart" width="400" height="200"></canvas>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div class="card-elevated p-8">
+        <h3 class="text-2xl font-bold text-gray-900 mb-6 font-heading">Estado de Equipos</h3>
+        <div class="bg-gradient-to-br from-gray-50 to-gray-100 p-6 rounded-xl border border-gray-200">
+          <canvas id="equiposChart" width="400" height="250" class="mx-auto"></canvas>
+        </div>
       </div>
 
-      <div class="bg-white p-6 rounded-lg shadow">
-        <h3 class="text-lg font-medium text-gray-900 mb-4">Reportes Recientes</h3>
-        <div class="space-y-3">
+      <div class="card-elevated p-8">
+        <h3 class="text-2xl font-bold text-gray-900 mb-6 font-heading">Reportes Recientes</h3>
+
+        <!-- Empty state for recent reports -->
+        <div v-if="!stats?.reportes_recientes || stats.reportes_recientes.length === 0"
+             class="text-center py-12 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl border-2 border-dashed border-gray-300">
+          <div class="icon-large bg-gray-100 mx-auto mb-4">
+            <i class="fas fa-clipboard-list text-3xl text-gray-400"></i>
+          </div>
+          <p class="text-gray-500 font-body">No hay reportes recientes</p>
+        </div>
+
+        <!-- Recent reports list -->
+        <div v-else class="space-y-4">
           <div
-            v-for="reporte in stats?.reportes_recientes || []"
+            v-for="reporte in stats.reportes_recientes"
             :key="reporte.id"
-            class="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg"
+            class="card-elevated p-4 hover:shadow-md transition-all duration-200 border-l-4 border-l-red-500"
           >
-            <div class="h-2 w-2 bg-red-500 rounded-full mt-2"></div>
-            <div class="flex-1">
-              <p class="text-sm font-medium text-gray-900">{{ reporte.equipo }}</p>
-              <p class="text-xs text-gray-600">{{ reporte.observacion }}</p>
-              <p class="text-xs text-gray-500">{{ reporte.fecha }}</p>
+            <div class="flex items-start space-x-4">
+              <div class="icon-container bg-red-100 flex-shrink-0">
+                <i class="fas fa-exclamation-triangle text-red-600"></i>
+              </div>
+              <div class="flex-1 space-y-2">
+                <div class="flex items-center justify-between">
+                  <p class="text-sm font-semibold text-gray-900 font-body">{{ reporte.equipo }}</p>
+                  <span class="text-xs text-gray-500 font-body">{{ reporte.fecha }}</span>
+                </div>
+                <p class="text-sm text-gray-600 font-body">{{ reporte.observacion }}</p>
+              </div>
             </div>
           </div>
         </div>

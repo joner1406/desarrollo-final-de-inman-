@@ -1,46 +1,63 @@
 <template>
-  <div class="space-y-6">
-    <div class="bg-white p-6 rounded-lg shadow">
-      <div class="flex justify-between items-center mb-4">
-        <h3 class="text-lg font-medium text-gray-900">Gestión de Mantenimientos</h3>
+  <div class="space-y-8">
+    <div class="card-elevated p-8">
+      <div class="flex justify-between items-center mb-6">
+        <h3 class="text-2xl font-bold text-gray-900 font-heading">Gestión de Mantenimientos</h3>
       </div>
 
-      <div class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200">
-          <thead class="bg-gray-50">
-            <tr>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Técnico</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Equipo</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
-              <th v-if="userPermissions?.can_manage_mantenimientos" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
-            </tr>
-          </thead>
-          <tbody class="bg-white divide-y divide-gray-200">
-            <tr v-for="mantenimiento in mantenimientos" :key="mantenimiento.id" class="hover:bg-gray-50">
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ mantenimiento.id }}</td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ formatDate(mantenimiento.fechahora) }}</td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ mantenimiento.usuario_nombre }}</td>
-              <td class="px-6 py-4 text-sm text-gray-900">{{ mantenimiento.equipo_tipo }} - {{ mantenimiento.equipo_modelo }}</td>
-              <td class="px-6 py-4 whitespace-nowrap">
-                <span :class="mantenimiento.fechafin ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'"
-                      class="inline-flex px-2 py-1 text-xs font-semibold rounded-full">
+      <!-- Empty state when no maintenance records -->
+      <div v-if="mantenimientos.length === 0" class="text-center py-16 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl border-2 border-dashed border-gray-300">
+        <div class="icon-large bg-gray-100 mx-auto mb-6">
+          <i class="fas fa-tools text-4xl text-gray-400"></i>
+        </div>
+        <h3 class="text-xl font-semibold text-gray-700 font-heading mb-2">No hay mantenimientos registrados</h3>
+        <p class="text-gray-500 font-body">Los registros de mantenimiento aparecerán aquí cuando se realicen trabajos de mantenimiento en los equipos.</p>
+      </div>
+
+      <!-- Maintenance table when there are records -->
+      <div v-else class="space-y-4">
+        <div v-for="mantenimiento in mantenimientos" :key="mantenimiento.id"
+             class="card-elevated p-6 hover:shadow-lg transition-all duration-300">
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
+            <div class="flex-1 space-y-3">
+              <div class="flex items-center justify-between">
+                <h4 class="text-lg font-semibold text-gray-900 font-heading">
+                  Mantenimiento #{{ mantenimiento.id }}
+                </h4>
+                <span :class="mantenimiento.fechafin ? 'status-success' : 'status-warning'" class="status-badge">
                   {{ mantenimiento.fechafin ? 'Completado' : 'En progreso' }}
                 </span>
-              </td>
-              <td v-if="userPermissions?.can_manage_mantenimientos" class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                <button
-                  v-if="!mantenimiento.fechafin"
-                  @click="completeMantenimiento(mantenimiento)"
-                  class="text-green-600 hover:text-green-900"
-                >
-                  <i class="fas fa-check"></i>
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+                <div class="space-y-1">
+                  <p class="text-gray-500 font-medium font-body uppercase tracking-wide text-xs">Fecha</p>
+                  <p class="text-gray-900 font-body">{{ formatDate(mantenimiento.fechahora) }}</p>
+                </div>
+                <div class="space-y-1">
+                  <p class="text-gray-500 font-medium font-body uppercase tracking-wide text-xs">Técnico</p>
+                  <p class="text-gray-900 font-body">{{ mantenimiento.usuario_nombre }}</p>
+                </div>
+                <div class="space-y-1">
+                  <p class="text-gray-500 font-medium font-body uppercase tracking-wide text-xs">Equipo</p>
+                  <p class="text-gray-900 font-body">{{ mantenimiento.equipo_tipo }} - {{ mantenimiento.equipo_modelo }}</p>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="userPermissions?.can_manage_mantenimientos && !mantenimiento.fechafin" class="flex-shrink-0">
+              <button
+                @click="completeMantenimiento(mantenimiento)"
+                :disabled="completing === mantenimiento.id"
+                class="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <i v-if="completing === mantenimiento.id" class="fas fa-spinner fa-spin mr-2"></i>
+                <i v-else class="fas fa-check mr-2"></i>
+                {{ completing === mantenimiento.id ? 'Completando...' : 'Completar' }}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -58,6 +75,7 @@ export default {
     const { apiCall } = useApi()
 
     const mantenimientos = ref([])
+    const completing = ref(null)
 
     const loadMantenimientos = async () => {
       try {
@@ -68,12 +86,17 @@ export default {
     }
 
     const completeMantenimiento = async (mantenimiento) => {
+      if (!confirm(`¿Estás seguro de marcar como completado el mantenimiento #${mantenimiento.id}?`)) return
+
+      completing.value = mantenimiento.id
       try {
         await apiCall('POST', `/api/actividades/${mantenimiento.id}/completar`)
         mantenimiento.fechafin = new Date().toISOString()
         alert('Mantenimiento completado exitosamente')
       } catch (error) {
         alert('Error al completar mantenimiento: ' + error.message)
+      } finally {
+        completing.value = null
       }
     }
 
@@ -89,6 +112,7 @@ export default {
     return {
       userPermissions,
       mantenimientos,
+      completing,
       completeMantenimiento,
       formatDate
     }

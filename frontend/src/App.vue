@@ -111,14 +111,19 @@
         </header>
 
         <!-- Content Area -->
-        <main class="flex-1 overflow-y-auto p-6">
-          <div v-if="loading" class="flex justify-center items-center h-64">
-            <i class="fas fa-spinner fa-spin text-3xl text-indigo-600"></i>
+        <main class="flex-1 overflow-y-auto page-container">
+          <div v-if="loading" class="loading-overlay">
+            <div class="flex flex-col items-center space-y-4">
+              <div class="loading-spinner"></div>
+              <p class="text-gray-600 font-body">Cargando...</p>
+            </div>
           </div>
 
-          <transition name="fade" mode="out-in">
-            <component :is="currentComponent" />
-          </transition>
+          <div v-else class="content-wrapper">
+            <transition name="fade" mode="out-in">
+              <component :is="currentComponent" class="fade-in-up" />
+            </transition>
+          </div>
         </main>
       </div>
     </div>

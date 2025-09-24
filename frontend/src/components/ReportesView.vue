@@ -37,59 +37,56 @@
         <p class="text-gray-500 font-body">Los reportes de incidencias aparecerán aquí cuando sean creados.</p>
       </div>
 
-      <!-- Reports cards when there are records -->
+      <!-- Reports table when there are records -->
       <div v-else class="space-y-4">
-        <div v-for="reporte in reportes" :key="reporte.id"
-             class="card-elevated p-6 hover:shadow-lg transition-all duration-300">
-          <div class="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
-            <div class="flex-1 space-y-3">
-              <div class="flex items-center justify-between">
-                <h4 class="text-lg font-semibold text-gray-900 font-heading">
-                  Reporte #{{ reporte.id }}
-                </h4>
-                <span :class="reporte.resuelto ? 'status-success' : 'status-danger'" class="status-badge">
-                  {{ reporte.resuelto ? 'Resuelto' : 'Activo' }}
-                </span>
-              </div>
-
-              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
-                <div class="space-y-1">
-                  <p class="text-gray-500 font-medium font-body uppercase tracking-wide text-xs">Fecha</p>
-                  <p class="text-gray-900 font-body">{{ formatDate(reporte.fechahora) }}</p>
-                </div>
-                <div class="space-y-1">
-                  <p class="text-gray-500 font-medium font-body uppercase tracking-wide text-xs">Usuario</p>
-                  <p class="text-gray-900 font-body">{{ reporte.usuario_nombre }}</p>
-                </div>
-                <div class="space-y-1" v-if="reporte.equipo_tipo && reporte.equipo_modelo">
-                  <p class="text-gray-500 font-medium font-body uppercase tracking-wide text-xs">Equipo</p>
-                  <p class="text-gray-900 font-body">{{ reporte.equipo_tipo }} - {{ reporte.equipo_modelo }}</p>
-                </div>
-                <div class="space-y-1" v-if="reporte.area_nombre">
-                  <p class="text-gray-500 font-medium font-body uppercase tracking-wide text-xs">Área</p>
-                  <p class="text-gray-900 font-body">{{ reporte.area_nombre }}</p>
-                </div>
-              </div>
-
-              <div class="space-y-1">
-                <p class="text-gray-500 font-medium font-body uppercase tracking-wide text-xs">Observación</p>
-                <p class="text-gray-700 font-body bg-gray-50 p-3 rounded-lg">{{ reporte.observacion }}</p>
-              </div>
-            </div>
-
-            <div v-if="userPermissions?.can_manage_reportes && !reporte.resuelto" class="flex-shrink-0">
-              <button
-                @click="resolveReporte(reporte)"
-                :disabled="resolving === reporte.id"
-                class="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-                type="button"
-              >
-                <i v-if="resolving === reporte.id" class="fas fa-spinner fa-spin mr-2"></i>
-                <i v-else class="fas fa-check mr-2"></i>
-                {{ resolving === reporte.id ? 'Resolviendo...' : 'Resolver' }}
-              </button>
-            </div>
-          </div>
+        <div class="flex justify-end">
+          <button @click="loadReportes" :disabled="loading" class="btn-secondary disabled:opacity-50">
+            <i v-if="loading" class="fas fa-spinner fa-spin mr-2"></i>
+            <i v-else class="fas fa-sync mr-2"></i>
+            Actualizar listado
+          </button>
+        </div>
+        <div class="overflow-x-auto bg-white rounded-lg shadow">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usuario</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Equipo</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Observación</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                <th class="px-4 py-3"></th>
+              </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+              <tr v-for="reporte in reportes" :key="reporte.id" class="hover:bg-gray-50">
+                <td class="px-4 py-3 text-sm text-gray-900 font-mono">#{{ reporte.id }}</td>
+                <td class="px-4 py-3 text-sm text-gray-700">{{ formatDate(reporte.fechahora) }}</td>
+                <td class="px-4 py-3 text-sm text-gray-700">{{ reporte.usuario_nombre || 'N/A' }}</td>
+                <td class="px-4 py-3 text-sm text-gray-700">
+                  <span v-if="reporte.equipo_tipo || reporte.equipo_modelo">{{ reporte.equipo_tipo || '' }} <span v-if="reporte.equipo_tipo && reporte.equipo_modelo">-</span> {{ reporte.equipo_modelo || '' }}</span>
+                  <span v-else>N/A</span>
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-700 max-w-md truncate" :title="reporte.observacion">{{ reporte.observacion }}</td>
+                <td class="px-4 py-3">
+                  <span :class="reporte.resuelto ? 'status-success' : 'status-danger'" class="status-badge">
+                    {{ reporte.resuelto ? 'Resuelto' : 'Activo' }}
+                  </span>
+                </td>
+                <td class="px-4 py-3 text-right whitespace-nowrap">
+                  <button v-if="(userPermissions?.can_manage_reportes || userPermissions?.can_send_to_maintenance || userPermissions?.can_create_reportes) && !reporte.resuelto"
+                          @click="sendToMantenimiento(reporte)"
+                          :disabled="resolving === reporte.id"
+                          class="btn-primary disabled:opacity-50 disabled:cursor-not-allowed">
+                    <i v-if="resolving === reporte.id" class="fas fa-spinner fa-spin mr-2"></i>
+                    <i v-else class="fas fa-paper-plane mr-2"></i>
+                    {{ resolving === reporte.id ? 'Enviando...' : 'Enviar' }}
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -124,16 +121,17 @@
               </p>
             </div>
             
-            <!-- Campos opcionales de área y espacio -->
-            <div v-if="areas.length > 0">
+            <!-- Área (usar datos del API si existen; de lo contrario, opciones por defecto) -->
+            <div>
               <label class="form-label">Área (Opcional)</label>
               <select v-model="reporteForm.area" class="form-input">
                 <option value="">Seleccionar área</option>
-                <option v-for="area in areas" :key="area.id" :value="area.id">{{ area.nombre }}</option>
+                <option v-for="area in displayedAreas" :key="area.id" :value="area.id">{{ area.nombre }}</option>
               </select>
             </div>
             
-            <div v-if="filteredEspacios.length > 0">
+            <!-- Espacio (filtrado por área seleccionada; usa datos API o por defecto) -->
+            <div>
               <label class="form-label">Espacio (Opcional)</label>
               <select v-model="reporteForm.espacio" class="form-input">
                 <option value="">Seleccionar espacio</option>
@@ -195,8 +193,28 @@ export default {
       observacion: ''
     })
 
+    // Defaults cuando la API no devuelve datos
+    const defaultAreas = [
+      { id: 'A', nombre: 'Bloque A' },
+      { id: 'B', nombre: 'Bloque B' },
+      { id: 'C', nombre: 'Bloque C' },
+      { id: 'LAB', nombre: 'Laboratorio' }
+    ]
+
+    const defaultEspacios = [
+      { id: 'A-101', area_id: 'A', nombre: 'Aula 101' },
+      { id: 'A-102', area_id: 'A', nombre: 'Aula 102' },
+      { id: 'B-201', area_id: 'B', nombre: 'Aula 201' },
+      { id: 'LAB-1', area_id: 'LAB', nombre: 'Lab Sistemas' }
+    ]
+
+    const displayedAreas = computed(() => (areas.value && areas.value.length ? areas.value : defaultAreas))
+
+    const allEspacios = computed(() => (espacios.value && espacios.value.length ? espacios.value : defaultEspacios))
+
     const filteredEspacios = computed(() => {
-      return espacios.value.filter(espacio => espacio.area_id == reporteForm.value.area)
+      const selectedArea = reporteForm.value.area
+      return (allEspacios.value || []).filter(esp => selectedArea ? String(esp.area_id) == String(selectedArea) : true)
     })
 
     const isFormValid = computed(() => {
@@ -214,17 +232,61 @@ export default {
         // Crear un endpoint simplificado usando actividades si no existe reportes
         try {
           const response = await apiCall('GET', '/api/reportes')
-          reportes.value = response || []
+          if (Array.isArray(response) && response.length > 0) {
+            reportes.value = response
+          } else {
+            console.warn('No hay datos en /api/reportes, intentando cargar desde /api/actividades (fallback)')
+            const allActivities = await apiCall('GET', '/api/actividades')
+            const mapped = (allActivities || [])
+              .filter(a => a.tipo_actividad === 'reporte')
+              .map(a => ({
+                id: a.id,
+                fechahora: a.fecha_actividad || a.created_at || null,
+                usuario_nombre: a.usuario_nombre,
+                equipo_tipo: a.equipo_tipo,
+                equipo_modelo: a.equipo_modelo,
+                area_nombre: a.area_nombre || null,
+                observacion: a.descripcion?.replace(/^Reporte:\s*/i, '') || a.descripcion,
+                resuelto: false
+              }))
+            if (mapped.length > 0) {
+              reportes.value = mapped
+            } else {
+              console.warn('Fallback sin resultados, manteniendo lista actual')
+            }
+          }
         } catch (error) {
           console.warn('No se pudo cargar /api/reportes, intentando alternativa')
           // Como alternativa, podríamos usar actividades
-          reportes.value = []
+          try {
+            const allActivities = await apiCall('GET', '/api/actividades')
+            const mapped = (allActivities || [])
+              .filter(a => a.tipo_actividad === 'reporte')
+              .map(a => ({
+                id: a.id,
+                fechahora: a.fecha_actividad || a.created_at || null,
+                usuario_nombre: a.usuario_nombre,
+                equipo_tipo: a.equipo_tipo,
+                equipo_modelo: a.equipo_modelo,
+                area_nombre: a.area_nombre || null,
+                observacion: a.descripcion?.replace(/^Reporte:\s*/i, '') || a.descripcion,
+                resuelto: false
+              }))
+            if (mapped.length > 0) {
+              reportes.value = mapped
+            } else {
+              console.warn('Fallback /api/actividades sin resultados, manteniendo lista actual')
+            }
+          } catch (fallbackError) {
+            console.warn('Fallback /api/actividades también falló:', fallbackError?.message)
+            // mantener lista actual
+          }
         }
         console.log('Reportes loaded:', reportes.value.length)
       } catch (error) {
         console.error('Error loading reportes:', error)
         errorMessage.value = 'Error al cargar reportes: ' + error.message
-        reportes.value = []
+        // mantener lista actual en caso de error
       }
     }
 
@@ -306,10 +368,14 @@ export default {
 
         console.log('Sending reporte data:', reporteData)
 
+        let createdId = null
+        let createdAt = new Date().toISOString()
+
         // Intentar crear el reporte
         try {
           const response = await apiCall('POST', '/api/reportes', reporteData)
           console.log('Reporte created successfully:', response)
+          createdId = response?.id || response?.insertId || null
         } catch (apiError) {
           // Si el endpoint no existe, simular creación usando actividades
           console.warn('Endpoint /api/reportes no existe, creando actividad alternativa')
@@ -319,11 +385,32 @@ export default {
             tipo_actividad: 'reporte',
             descripcion: `Reporte: ${reporteData.observacion}`
           }
-          
-          await apiCall('POST', '/api/actividades', actividadData)
+          const actResp = await apiCall('POST', '/api/actividades', actividadData)
+          createdId = actResp?.id || actResp?.insertId || null
+        }
+        
+        // Optimistic UI: añadir el reporte nuevo a la lista inmediatamente
+        try {
+          const equipoSel = equipos.value.find(e => e.id == reporteData.equipo)
+          const nuevoReporte = {
+            id: createdId || Math.floor(Math.random() * 1000000),
+            fechahora: createdAt,
+            usuario_nombre: user.value?.nombre || 'Tú',
+            equipo_tipo: equipoSel?.tipo_equipo || null,
+            equipo_modelo: equipoSel?.modelo || null,
+            area_nombre: areas.value.find(a => a.id == reporteForm.value.area)?.nombre || null,
+            observacion: reporteData.observacion,
+            resuelto: false
+          }
+          reportes.value = [nuevoReporte, ...(reportes.value || [])]
+        } catch (optimisticErr) {
+          console.warn('No se pudo construir el reporte para UI inmediata:', optimisticErr?.message)
         }
         
         closeReporteModal()
+        // Esperar breve tiempo antes de recargar para permitir consistencia en BD
+        await new Promise(r => setTimeout(r, 300))
+        // También recargar desde backend para asegurar sincronización
         await loadReportes()
         
         alert('Reporte creado exitosamente')
@@ -354,6 +441,22 @@ export default {
       } catch (error) {
         console.error('Error resolving reporte:', error)
         alert('Error al resolver reporte: ' + error.message)
+      } finally {
+        resolving.value = null
+      }
+    }
+
+    // Enviar reporte a mantenimiento - NUEVO
+    const sendToMantenimiento = async (reporte) => {
+      if (!confirm(`¿Enviar el reporte #${reporte.id} a mantenimiento?`)) return
+      resolving.value = reporte.id
+      try {
+        await apiCall('POST', `/api/reportes/${reporte.id}/enviar-a-mantenimiento`)
+        reporte.resuelto = true
+        alert('Reporte enviado a mantenimiento exitosamente')
+      } catch (error) {
+        const msg = error?.response?.data?.error || error.message
+        alert('Error al enviar a mantenimiento: ' + msg)
       } finally {
         resolving.value = null
       }
@@ -414,8 +517,10 @@ export default {
       closeReporteModal,
       createReporte,
       resolveReporte,
+      sendToMantenimiento,
       formatDate,
-      debugPermissions
+      debugPermissions,
+      displayedAreas
     }
   }
 }

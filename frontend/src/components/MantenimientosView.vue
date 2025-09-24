@@ -45,7 +45,7 @@
               </div>
             </div>
 
-            <div v-if="userPermissions?.can_manage_mantenimientos && !mantenimiento.fechafin" class="flex-shrink-0">
+            <div v-if="userPermissions?.can_manage_mantenimientos && currentUser?.perfil === 'tecnico' && !mantenimiento.fechafin" class="flex-shrink-0">
               <button
                 @click="completeMantenimiento(mantenimiento)"
                 :disabled="completing === mantenimiento.id"
@@ -71,7 +71,7 @@ import { useApi } from '../composables/useApi'
 export default {
   name: 'MantenimientosView',
   setup() {
-    const { userPermissions } = useAuth()
+    const { userPermissions, currentUser } = useAuth()
     const { apiCall } = useApi()
 
     const mantenimientos = ref([])
@@ -79,7 +79,14 @@ export default {
 
     const loadMantenimientos = async () => {
       try {
-        mantenimientos.value = await apiCall('GET', '/api/actividades')
+        const all = await apiCall('GET', '/api/actividades')
+        // Solo mostrar actividades de tipo 'mantenimiento' y mapear fecha para la vista
+        mantenimientos.value = (all || [])
+          .filter(a => a.tipo_actividad === 'mantenimiento')
+          .map(a => ({
+            ...a,
+            fechahora: a.fecha_actividad || a.fechahora || a.created_at || null
+          }))
       } catch (error) {
         console.error('Error loading mantenimientos:', error)
       }
@@ -94,7 +101,8 @@ export default {
         mantenimiento.fechafin = new Date().toISOString()
         alert('Mantenimiento completado exitosamente')
       } catch (error) {
-        alert('Error al completar mantenimiento: ' + error.message)
+        const msg = error?.response?.data?.error || error.message
+        alert('Error al completar mantenimiento: ' + msg)
       } finally {
         completing.value = null
       }
@@ -111,6 +119,7 @@ export default {
 
     return {
       userPermissions,
+      currentUser,
       mantenimientos,
       completing,
       completeMantenimiento,

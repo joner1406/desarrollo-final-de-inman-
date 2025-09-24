@@ -32,12 +32,12 @@ const sessionStore = new MySQLStore({}, pool);
 
 // Error handlers
 process.on('uncaughtException', (err) => {
-  console.error('❌ Uncaught Exception:', err);
+  console.error(' Uncaught Exception:', err);
   process.exit(1);
 });
 
 process.on('unhandledRejection', (err) => {
-  console.error('❌ Unhandled Rejection:', err);
+  console.error(' Unhandled Rejection:', err);
   process.exit(1);
 });
 
@@ -100,6 +100,7 @@ const requireAuth = (req, res, next) => {
 
 // Get user permissions based on profile - ACTUALIZADO PARA NUEVOS ROLES
 const getUserPermissions = (rol) => {
+  const key = (rol || '').toString().trim().toLowerCase();
   const permissionsMap = {
     'admin': {
       can_manage_users: true,
@@ -131,9 +132,21 @@ const getUserPermissions = (rol) => {
       can_use_qr: false,
       can_create_reportes: true,
       modules: ['dashboard', 'equipos', 'reportes', 'monitoreo']
+    },
+    'instructor': {
+      can_manage_users: false,
+      can_manage_equipos: false,
+      can_manage_reportes: false,
+      can_manage_mantenimientos: false,
+      can_view_dashboard: true,
+      can_view_monitoreo: true,
+      can_use_qr: false,
+      can_create_reportes: true,
+      can_send_to_maintenance: true,
+      modules: ['dashboard', 'equipos', 'reportes', 'monitoreo']
     }
   };
-  return permissionsMap[rol] || {};
+  return permissionsMap[key] || {};
 };
 
 // CREAR EQUIPO - CORREGIDO PARA NUEVA ESTRUCTURA
@@ -470,6 +483,221 @@ app.get('/api/actividades', requireAuth, async (req, res) => {
   }
 });
 
+// NUEVO: Crear actividad (soporte para crear reportes como actividad)
+app.post('/api/actividades', requireAuth, async (req, res) => {
+  try {
+    const { equipo_id, tipo_actividad, descripcion, estado_anterior_id = null, estado_nuevo_id = null, observaciones = null } = req.body;
+
+    if (!equipo_id || !tipo_actividad || !descripcion) {
+      return res.status(400).json({ error: 'equipo_id, tipo_actividad y descripcion son requeridos' });
+    }
+
+    const [result] = await pool.execute(
+      'INSERT INTO actividad (equipo_id, usuario_id, tipo_actividad, descripcion, estado_anterior_id, estado_nuevo_id, observaciones, fecha_actividad) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
+      [equipo_id, req.session.userId, tipo_actividad, descripcion, estado_anterior_id, estado_nuevo_id, observaciones]
+    );
+
+    return res.status(201).json({ success: true, id: result.insertId });
+  } catch (error) {
+    console.error('Crear actividad error:', error);
+    return res.status(500).json({ error: 'Error al crear actividad' });
+  }
+});
+
+// NUEVOS ENDPOINTS DE REPORTES (usar tabla 'reporte' y vista 'v_reportes_list')
+// Listar reportes
+app.get('/api/reportes', requireAuth, async (req, res) => {
+  try {
+    const [rows] = await pool.execute('SELECT * FROM v_reportes_list');
+    res.json(rows);
+  } catch (error) {
+    console.error('Get reportes error:', error);
+    res.status(500).json({ error: 'Error al cargar reportes' });
+  }
+});
+
+// Crear reporte
+app.post('/api/reportes', requireAuth, async (req, res) => {
+  try {
+    const permissions = getUserPermissions(req.session.userProfile);
+    // Permitir crear reportes si el usuario tiene permiso explícito o si es admin/tecnico
+    if (!permissions.can_create_reportes && !permissions.can_manage_reportes) {
+      return res.status(403).json({ error: 'Sin permisos para crear reportes' });
+    }
+
+    const { equipo, observacion } = req.body;
+
+    if (!equipo || !observacion || !String(observacion).trim()) {
+      return res.status(400).json({ error: 'equipo y observacion son requeridos' });
+    }
+
+    const [result] = await pool.execute(
+      'INSERT INTO reporte (equipo_id, usuario_id, observacion, resuelto, fechahora, created_at, updated_at) VALUES (?, ?, ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)',
+      [parseInt(equipo), req.session.userId, String(observacion).trim()]
+    );
+
+    res.status(201).json({ success: true, id: result.insertId });
+  } catch (error) {
+    console.error('Crear reporte error:', error);
+    res.status(500).json({ error: 'Error al crear reporte' });
+  }
+});
+
+// Resolver reporte
+app.post('/api/reportes/:id/resolver', requireAuth, async (req, res) => {
+  try {
+    const permissions = getUserPermissions(req.session.userProfile);
+    if (!permissions.can_manage_reportes) {
+      return res.status(403).json({ error: 'Sin permisos para resolver reportes' });
+    }
+
+    const { id } = req.params;
+
+    const [result] = await pool.execute(
+      'UPDATE reporte SET resuelto = 1, fecha_resolucion = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Reporte no encontrado' });
+    }
+
+    res.json({ success: true, message: 'Reporte marcado como resuelto' });
+  } catch (error) {
+    console.error('Resolver reporte error:', error);
+    res.status(500).json({ error: 'Error al resolver reporte' });
+  }
+});
+
+// Enviar reporte a mantenimiento - NUEVO ENDPOINT
+app.post('/api/reportes/:id/enviar-a-mantenimiento', requireAuth, async (req, res) => {
+  try {
+    const permissions = getUserPermissions(req.session.userProfile);
+    console.log('Auth enviar-a-mantenimiento:', {
+      userId: req.session.userId,
+      role: req.session.userProfile,
+      permissions
+    });
+    if (!permissions.can_manage_reportes && !permissions.can_manage_mantenimientos && !permissions.can_send_to_maintenance) {
+      return res.status(403).json({ error: 'Sin permisos para enviar reportes a mantenimiento' });
+    }
+
+    const { id } = req.params;
+
+    // Obtener el reporte y datos del equipo
+    const [rows] = await pool.execute(
+      `SELECT r.id as reporte_id, r.observacion, r.equipo_id, e.estado_id as equipo_estado_id
+       FROM reporte r
+       JOIN equipo e ON r.equipo_id = e.id
+       WHERE r.id = ?`,
+      [id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Reporte no encontrado' });
+    }
+
+    const reporte = rows[0];
+
+    // Obtener ID del estado 'Mantenimiento'
+    const [estadoRows] = await pool.execute(
+      "SELECT id, nombre FROM estado WHERE nombre IN ('Mantenimiento')"
+    );
+
+    const estadoMantenimiento = estadoRows.find(e => e.nombre === 'Mantenimiento');
+    if (!estadoMantenimiento) {
+      return res.status(500).json({ error: "Estado 'Mantenimiento' no configurado en la base de datos" });
+    }
+
+    // Actualizar estado del equipo a Mantenimiento
+    await pool.execute(
+      'UPDATE equipo SET estado_id = ?, fecha_actualizacion = CURRENT_TIMESTAMP WHERE id = ? ',
+      [estadoMantenimiento.id, reporte.equipo_id]
+    );
+
+    // Crear actividad de mantenimiento
+    const descripcion = `Mantenimiento generado desde reporte #${reporte.reporte_id}: ${reporte.observacion}`;
+    const [activityResult] = await pool.execute(
+      'INSERT INTO actividad (equipo_id, usuario_id, tipo_actividad, descripcion, estado_anterior_id, estado_nuevo_id, observaciones, fecha_actividad) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
+      [reporte.equipo_id, req.session.userId, 'mantenimiento', descripcion, reporte.equipo_estado_id, estadoMantenimiento.id, null]
+    );
+
+    // Marcar reporte como resuelto/enviado
+    await pool.execute(
+      'UPDATE reporte SET resuelto = 1, fecha_resolucion = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [id]
+    );
+
+    res.status(201).json({ success: true, message: 'Reporte enviado a mantenimiento', actividad_id: activityResult.insertId });
+  } catch (error) {
+    console.error('Enviar a mantenimiento error:', error);
+    res.status(500).json({ error: 'Error al enviar reporte a mantenimiento' });
+  }
+});
+
+// Completar mantenimiento - NUEVO ENDPOINT
+app.post('/api/actividades/:id/completar', requireAuth, async (req, res) => {
+  try {
+    // Solo el rol TECNICO puede completar mantenimientos
+    if (req.session.userProfile !== 'tecnico') {
+      return res.status(403).json({ error: 'Solo los técnicos pueden completar mantenimientos' });
+    }
+
+    const { id } = req.params;
+
+    // Obtener la actividad
+    const [rows] = await pool.execute('SELECT * FROM actividad WHERE id = ?', [id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Actividad no encontrada' });
+    }
+
+    const actividad = rows[0];
+
+    if (actividad.tipo_actividad !== 'mantenimiento') {
+      return res.status(400).json({ error: 'La actividad no corresponde a un mantenimiento' });
+    }
+
+    // Obtener IDs de estado necesarios
+    const [estadoRows] = await pool.execute(
+      "SELECT id, nombre FROM estado WHERE nombre IN ('Mantenimiento', 'Disponible')"
+    );
+
+    const estadoMap = Object.fromEntries(estadoRows.map(e => [e.nombre, e.id]));
+    const estadoMantenimientoId = estadoMap['Mantenimiento'];
+    const estadoDisponibleId = estadoMap['Disponible'];
+
+    if (!estadoMantenimientoId || !estadoDisponibleId) {
+      return res.status(500).json({ error: 'Estados requeridos no configurados en la base de datos' });
+    }
+
+    // Actualizar el estado del equipo a Disponible
+    await pool.execute(
+      'UPDATE equipo SET estado_id = ?, fecha_actualizacion = CURRENT_TIMESTAMP WHERE id = ?',
+      [estadoDisponibleId, actividad.equipo_id]
+    );
+
+    // Registrar nueva actividad de cierre de mantenimiento
+    await pool.execute(
+      'INSERT INTO actividad (equipo_id, usuario_id, tipo_actividad, descripcion, estado_anterior_id, estado_nuevo_id, observaciones) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [
+        actividad.equipo_id,
+        req.session.userId,
+        'actualizacion',
+        'Mantenimiento completado',
+        estadoMantenimientoId,
+        estadoDisponibleId,
+        null
+      ]
+    );
+
+    const completionTime = new Date().toISOString();
+    res.json({ success: true, message: 'Mantenimiento completado', fechafin: completionTime });
+  } catch (error) {
+    console.error('Completar mantenimiento error:', error);
+    res.status(500).json({ error: 'Error al completar mantenimiento' });
+  }
+});
+
 // Test database connection
 app.get('/api/test-db', async (req, res) => {
   try {
@@ -489,11 +717,11 @@ app.use((error, req, res, next) => {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`🚀 INMAN Backend running on port ${PORT}`);
-  console.log(`📊 Dashboard: http://localhost:${PORT}/api/test-db`);
-  console.log(`🔐 Environment: ${process.env.NODE_ENV}`);
+  console.log(` INMAN Backend running on port ${PORT}`);
+  console.log(` Dashboard: http://localhost:${PORT}/api/test-db`);
+  console.log(` Environment: ${process.env.NODE_ENV}`);
 }).on('error', (err) => {
-  console.error('❌ Server startup error:', err);
+  console.error(' Server startup error:', err);
 });
 
 module.exports = app;

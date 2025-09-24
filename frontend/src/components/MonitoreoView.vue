@@ -6,14 +6,21 @@
       <!-- Filter Section -->
       <div class="mb-6">
         <label class="block text-sm font-medium text-gray-700 mb-2">Filtrar por Estado</label>
-        <select v-model="selectedEstado" @change="filterEquipos" 
-                class="px-3 py-2 border border-gray-300 rounded-md w-full md:w-1/3">
-          <option value="">Todos los Estados</option>
-          <option value="Disponible">Solo Disponibles</option>
-          <option value="Mantenimiento">En Mantenimiento</option>
-          <option value="Dañado">Dañados</option>
-          <option value="En Uso">En Uso</option>
-        </select>
+        <div class="flex flex-col md:flex-row md:items-center gap-2 md:gap-3">
+          <select v-model="selectedEstadoInput"
+                  class="px-3 py-2 border border-gray-300 rounded-md w-full md:w-1/3">
+            <option value="">Todos los Estados</option>
+            <option value="Disponible">Solo Disponibles</option>
+            <option value="Mantenimiento">En Mantenimiento</option>
+            <option value="Dañado">Dañados</option>
+            <option value="En Uso">En Uso</option>
+          </select>
+          <div class="flex gap-2">
+            <button @click="applyFilter" class="px-3 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">Aplicar</button>
+            <button @click="clearFilter" :disabled="!filterApplied && !selectedEstadoInput"
+                    class="px-3 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50">Limpiar</button>
+          </div>
+        </div>
       </div>
 
       <!-- Loading State -->
@@ -24,97 +31,105 @@
 
       <!-- Equipment Display -->
       <div v-else class="space-y-6">
-        <!-- Stats Section -->
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div class="bg-green-50 p-4 rounded-lg">
-            <div class="flex items-center">
-              <div class="h-8 w-8 bg-green-100 rounded-full flex items-center justify-center mr-3">
-                <i class="fas fa-check text-green-600"></i>
-              </div>
-              <div>
-                <p class="text-sm text-gray-600">Disponibles</p>
-                <p class="text-2xl font-bold text-green-600">{{ stats.disponibles }}</p>
-              </div>
-            </div>
-          </div>
-          <div class="bg-blue-50 p-4 rounded-lg">
-            <div class="flex items-center">
-              <div class="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
-                <i class="fas fa-play text-blue-600"></i>
-              </div>
-              <div>
-                <p class="text-sm text-gray-600">En Uso</p>
-                <p class="text-2xl font-bold text-blue-600">{{ stats.enUso }}</p>
-              </div>
-            </div>
-          </div>
-          <div class="bg-yellow-50 p-4 rounded-lg">
-            <div class="flex items-center">
-              <div class="h-8 w-8 bg-yellow-100 rounded-full flex items-center justify-center mr-3">
-                <i class="fas fa-tools text-yellow-600"></i>
-              </div>
-              <div>
-                <p class="text-sm text-gray-600">Mantenimiento</p>
-                <p class="text-2xl font-bold text-yellow-600">{{ stats.mantenimiento }}</p>
-              </div>
-            </div>
-          </div>
-          <div class="bg-red-50 p-4 rounded-lg">
-            <div class="flex items-center">
-              <div class="h-8 w-8 bg-red-100 rounded-full flex items-center justify-center mr-3">
-                <i class="fas fa-exclamation-triangle text-red-600"></i>
-              </div>
-              <div>
-                <p class="text-sm text-gray-600">Dañados</p>
-                <p class="text-2xl font-bold text-red-600">{{ stats.danados }}</p>
-              </div>
-            </div>
-          </div>
+        <!-- Show instruction until a filter is applied -->
+        <div v-if="!filterApplied" class="bg-gray-50 p-6 rounded-lg text-center text-gray-600">
+          <div class="text-gray-400 mb-2"><i class="fas fa-filter text-3xl"></i></div>
+          <p>Aplica un filtro para ver los equipos</p>
         </div>
 
-        <!-- Equipment Grid -->
-        <div class="bg-gray-100 p-6 rounded-lg">
-          <div class="flex justify-between items-center mb-4">
-            <h4 class="text-md font-medium text-gray-900">
-              Vista de Equipos 
-              <span class="text-sm text-gray-500">({{ filteredEquipos.length }} equipos)</span>
-            </h4>
-            <button @click="refreshData" :disabled="loading"
-                    class="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 disabled:opacity-50">
-              <i :class="loading ? 'fas fa-spinner fa-spin' : 'fas fa-sync'" class="mr-1"></i>
-              Actualizar
-            </button>
-          </div>
-
-          <!-- Equipment Cards Grid -->
-          <div v-if="filteredEquipos.length > 0" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            <div v-for="equipo in filteredEquipos" :key="equipo.id" 
-                 :class="getEquipmentStatusClass(equipo.estado_nombre)"
-                 class="p-4 rounded-lg cursor-pointer transform hover:scale-105 transition-all duration-200 shadow-sm"
-                 @click="showEquipmentDetails(equipo)">
-              <div class="text-center">
-                <i :class="getEquipmentIcon(equipo.tipo_equipo)" class="text-2xl mb-2"></i>
-                <div class="text-sm font-medium">{{ equipo.tipo_equipo }}</div>
-                <div class="text-xs text-gray-600">{{ equipo.marca_nombre }}</div>
-                <div class="text-xs font-mono mt-1">{{ equipo.modelo }}</div>
-                <div class="text-xs mt-2 px-2 py-1 rounded" 
-                     :class="getStatusBadgeClass(equipo.estado_nombre)">
-                  {{ equipo.estado_nombre }}
+        <template v-else>
+          <!-- Stats Section -->
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="bg-green-50 p-4 rounded-lg">
+              <div class="flex items-center">
+                <div class="h-8 w-8 bg-green-100 rounded-full flex items-center justify-center mr-3">
+                  <i class="fas fa-check text-green-600"></i>
+                </div>
+                <div>
+                  <p class="text-sm text-gray-600">Disponibles</p>
+                  <p class="text-2xl font-bold text-green-600">{{ stats.disponibles }}</p>
+                </div>
+              </div>
+            </div>
+            <div class="bg-blue-50 p-4 rounded-lg">
+              <div class="flex items-center">
+                <div class="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
+                  <i class="fas fa-play text-blue-600"></i>
+                </div>
+                <div>
+                  <p class="text-sm text-gray-600">En Uso</p>
+                  <p class="text-2xl font-bold text-blue-600">{{ stats.enUso }}</p>
+                </div>
+              </div>
+            </div>
+            <div class="bg-yellow-50 p-4 rounded-lg">
+              <div class="flex items-center">
+                <div class="h-8 w-8 bg-yellow-100 rounded-full flex items-center justify-center mr-3">
+                  <i class="fas fa-tools text-yellow-600"></i>
+                </div>
+                <div>
+                  <p class="text-sm text-gray-600">Mantenimiento</p>
+                  <p class="text-2xl font-bold text-yellow-600">{{ stats.mantenimiento }}</p>
+                </div>
+              </div>
+            </div>
+            <div class="bg-red-50 p-4 rounded-lg">
+              <div class="flex items-center">
+                <div class="h-8 w-8 bg-red-100 rounded-full flex items-center justify-center mr-3">
+                  <i class="fas fa-exclamation-triangle text-red-600"></i>
+                </div>
+                <div>
+                  <p class="text-sm text-gray-600">Dañados</p>
+                  <p class="text-2xl font-bold text-red-600">{{ stats.danados }}</p>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- Empty State -->
-          <div v-else class="text-center py-8">
-            <div class="text-gray-400 mb-2">
-              <i class="fas fa-search text-3xl"></i>
+          <!-- Equipment Grid -->
+          <div class="bg-gray-100 p-6 rounded-lg">
+            <div class="flex justify-between items-center mb-4">
+              <h4 class="text-md font-medium text-gray-900">
+                Vista de Equipos 
+                <span class="text-sm text-gray-500">({{ filteredEquipos.length }} equipos)</span>
+              </h4>
+              <button @click="refreshData" :disabled="loading"
+                      class="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 disabled:opacity-50">
+                <i :class="loading ? 'fas fa-spinner fa-spin' : 'fas fa-sync'" class="mr-1"></i>
+                Actualizar
+              </button>
             </div>
-            <p class="text-gray-600">
-              {{ selectedEstado ? 'No hay equipos con este estado' : 'No hay equipos registrados' }}
-            </p>
+
+            <!-- Equipment Cards Grid -->
+            <div v-if="filteredEquipos.length > 0" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              <div v-for="equipo in filteredEquipos" :key="equipo.id" 
+                   :class="getEquipmentStatusClass(equipo.estado_nombre)"
+                   class="p-4 rounded-lg cursor-pointer transform hover:scale-105 transition-all duration-200 shadow-sm"
+                   @click="showEquipmentDetails(equipo)">
+                <div class="text-center">
+                  <i :class="getEquipmentIcon(equipo.tipo_equipo)" class="text-2xl mb-2"></i>
+                  <div class="text-sm font-medium">{{ equipo.tipo_equipo }}</div>
+                  <div class="text-xs text-gray-600">{{ equipo.marca_nombre }}</div>
+                  <div class="text-xs font-mono mt-1">{{ equipo.modelo }}</div>
+                  <div class="text-xs mt-2 px-2 py-1 rounded" 
+                       :class="getStatusBadgeClass(equipo.estado_nombre)">
+                    {{ equipo.estado_nombre }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Empty State when filter applied but no results -->
+            <div v-else class="text-center py-8">
+              <div class="text-gray-400 mb-2">
+                <i class="fas fa-search text-3xl"></i>
+              </div>
+              <p class="text-gray-600">
+                {{ appliedEstado ? 'No hay equipos con este estado' : 'No hay equipos registrados' }}
+              </p>
+            </div>
           </div>
-        </div>
+        </template>
       </div>
 
       <!-- Equipment Details Modal -->
@@ -188,14 +203,17 @@ export default {
     const { apiCall, loading } = useApi()
     
     const equipos = ref([])
-    const selectedEstado = ref('')
+    const selectedEstadoInput = ref('')
+    const appliedEstado = ref('')
+    const filterApplied = ref(false)
     const showModal = ref(false)
     const selectedEquipo = ref(null)
 
     // Computed para equipos filtrados
     const filteredEquipos = computed(() => {
-      if (!selectedEstado.value) return equipos.value
-      return equipos.value.filter(equipo => equipo.estado_nombre === selectedEstado.value)
+      if (!filterApplied.value) return []
+      if (!appliedEstado.value) return equipos.value
+      return equipos.value.filter(equipo => equipo.estado_nombre === appliedEstado.value)
     })
 
     // Computed para estadísticas
@@ -224,8 +242,15 @@ export default {
       await loadEquipos()
     }
 
-    const filterEquipos = () => {
-      console.log('Filtering by:', selectedEstado.value)
+    const applyFilter = () => {
+      appliedEstado.value = selectedEstadoInput.value
+      filterApplied.value = true
+    }
+
+    const clearFilter = () => {
+      selectedEstadoInput.value = ''
+      appliedEstado.value = ''
+      filterApplied.value = false
     }
 
     const getEquipmentIcon = (tipo) => {
@@ -294,13 +319,16 @@ export default {
     return {
       equipos,
       filteredEquipos,
-      selectedEstado,
+      selectedEstadoInput,
+      appliedEstado,
+      filterApplied,
       stats,
       loading,
       showModal,
       selectedEquipo,
       refreshData,
-      filterEquipos,
+      applyFilter,
+      clearFilter,
       getEquipmentIcon,
       getEquipmentStatusClass,
       getStatusBadgeClass,
